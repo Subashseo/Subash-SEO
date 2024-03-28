@@ -1,0 +1,156 @@
+/* 
+// AdWords Script: Append YouTube Video Stats to Video Placement Report
+// ---------------------------------------------------------------------
+// Copyright 2017 Optmyzr Inc., All Rights Reserved
+// 
+// This script adds YT statistics like 'likes,' 'dislikes,' 'comments,' etc to a Google Sheet of videos
+// that your in-stream video ads have appeared on. You can then use these stats to determine when a video should
+// be added as a negative placement, for example when there is too high a ratio of 'dislikes' to 'likes'.
+//
+// Thanks to Kris Belau from Firewood Marketing for presenting the concept at SMX West 2017.
+//
+// Note that this script pulls stats from the YouTube Data API and these may not match exactly to what appears 
+// on the video's view page on youtube.com. No data will be returned for some videos, even when they have 
+// data on youtube.com
+//
+//
+// For more PPC management tools, visit www.optmyzr.com
+//
+*/
+function main() {
+  
+  // EDIT THIS. REPLACE THE URL WITH THE URL FOR YOUR DATA SHEET
+  //-----------------------------
+  var spreadsheetUrl = "https://docs.google.com/spreadsheets/d/1T3pjCIXPtBBzvzq83g3Phob4nJ7lcojsXJwN2CScd40/edit#gid=1648890643";
+  // DON'T EDIT ANYTHING PAST HERE ---------
+  
+  var currentSetting = new Object();
+  
+  var spreadsheet = SpreadsheetApp.openByUrl(spreadsheetUrl);
+  var sheet = spreadsheet.getActiveSheet();
+  var data = sheet.getDataRange();
+  var numRows = data.getNumRows();
+  var numColumns = data.getNumColumns();
+  var values = data.getValues();
+  
+  var columnNames = new Array();
+  
+  var spreadsheetInfo = getSpreadsheetData(spreadsheetUrl);
+  
+  if(!spreadsheetInfo.dislikeCountColumn) {
+    sheet.getRange(spreadsheetInfo.headerRow+1, numColumns+1, 1, 1).setValue(["dislike count"]);
+    numColumns++;
+    spreadsheetInfo.dislikeCountColumn = numColumns;
+  }
+  if(!spreadsheetInfo.likeCountColumn) {
+    sheet.getRange(spreadsheetInfo.headerRow+1, numColumns+1, 1, 1).setValue(["like count"]);
+    numColumns++;
+    spreadsheetInfo.likeCountColumn = numColumns;
+  }
+  if(!spreadsheetInfo.viewCountColumn) {
+    sheet.getRange(spreadsheetInfo.headerRow+1, numColumns+1, 1, 1).setValue(["view count"]);
+    numColumns++;
+    spreadsheetInfo.viewCountColumn = numColumns;
+  }
+  if(!spreadsheetInfo.commentCountColumn) {
+    sheet.getRange(spreadsheetInfo.headerRow+1, numColumns+1, 1, 1).setValue(["comment count"]);
+    numColumns++;
+    spreadsheetInfo.commentCountColumn = numColumns;
+  }
+  if(!spreadsheetInfo.favoriteCountColumn) {
+    sheet.getRange(spreadsheetInfo.headerRow+1, numColumns+1, 1, 1).setValue(["favorite count"]);
+    numColumns++;
+    spreadsheetInfo.favoriteCountColumn = numColumns;
+  }
+  
+  Logger.log("YT stats are now being added to " + spreadsheetUrl);
+             
+  for(var i = spreadsheetInfo.firstDataRow; i<numRows; i++) {
+    var row = values[i];
+    var url = row[spreadsheetInfo.urlColumn];
+    var urlParts = url.split("/");
+    var videoId = urlParts[2];
+    //Logger.log("video ID: " + videoId);
+    if(!videoId) break;
+    try {
+      var list = YouTube.Videos.list("Statistics", {
+        id: videoId
+      });
+      //Logger.log(JSON.stringify(list));
+      var items = list.items;
+      var item = items[0];
+      var statistics = item.statistics;
+      if(statistics) {
+        var dislikeCount = statistics.dislikeCount;
+        var likeCount = statistics.likeCount;
+        var favoriteCount = statistics.favoriteCount;
+        var viewCount = statistics.viewCount;
+        var commentCount = statistics.commentCount;
+        sheet.getRange(i+1, spreadsheetInfo.dislikeCountColumn, 1, 1).setValue(dislikeCount);
+        sheet.getRange(i+1, spreadsheetInfo.likeCountColumn, 1, 1).setValue(likeCount);
+        sheet.getRange(i+1, spreadsheetInfo.viewCountColumn, 1, 1).setValue(viewCount);
+        sheet.getRange(i+1, spreadsheetInfo.favoriteCountColumn, 1, 1).setValue(favoriteCount);
+        sheet.getRange(i+1, spreadsheetInfo.commentCountColumn, 1, 1).setValue(commentCount);
+      } else {
+        Logger.log("The YT API returned no stats for video with ID " + videoId);
+      }
+    } catch (e) {
+      Logger.log("No YT data for video with ID " + videoId + ". " + e);
+    }
+  }
+}
+
+function getSpreadsheetData(spreadsheetUrl) {
+  
+  var spreadsheetInfo = new Object();
+  
+  var spreadsheet = SpreadsheetApp.openByUrl(spreadsheetUrl);
+  var sheet = spreadsheet.getActiveSheet();
+  var data = sheet.getDataRange();
+  var numRows = data.getNumRows();
+  var numColumns = data.getNumColumns();
+  var values = data.getValues();
+  
+  var columnNames = new Array();
+  
+  for(var i = 0; i<numRows; i++) {
+    if(spreadsheetInfo.headerRow != null) return(spreadsheetInfo);
+    for(var j = 0; j < numColumns; j++) {
+      var row = values[i];
+      var value = row[j];
+      Logger.log(value);
+      columnNames[i] = value;
+      try {
+        if(value.toLowerCase().indexOf("url") != -1) {
+          spreadsheetInfo.firstDataRow = i+1;
+          spreadsheetInfo.headerRow = i;
+          spreadsheetInfo.urlColumn = j;
+        } else if(value.toLowerCase().indexOf("like count") != -1) {
+          if(value.toLowerCase().indexOf("dislike count") != -1) {
+            spreadsheetInfo.firstDataRow = i+1;
+            spreadsheetInfo.headerRow = i;
+            spreadsheetInfo.dislikeCountColumn = j;
+          } else {
+            spreadsheetInfo.firstDataRow = i+1;
+            spreadsheetInfo.headerRow = i;
+            spreadsheetInfo.likeCountColumn = j;
+          }
+        } else if(value.toLowerCase().indexOf("view count") != -1) {
+          spreadsheetInfo.firstDataRow = i+1;
+          spreadsheetInfo.headerRow = i;
+          spreadsheetInfo.viewCountColumn = j;
+        } else if(value.toLowerCase().indexOf("favorite count") != -1) {
+          spreadsheetInfo.firstDataRow = i+1;
+          spreadsheetInfo.headerRow = i;
+          spreadsheetInfo.favoriteCountColumn = j;
+        } else if(value.toLowerCase().indexOf("comment count") != -1) {
+          spreadsheetInfo.firstDataRow = i+1;
+          spreadsheetInfo.headerRow = i;
+          spreadsheetInfo.commentCountColumn = j;
+        }
+      } catch(e) {
+        //
+      }
+    }
+  }
+}
